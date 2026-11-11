@@ -8,15 +8,52 @@
   html, body { margin: 0; height: 100%; background: #f4f3ef; font-family: system-ui, sans-serif; }
   #info { position: fixed; top: 10px; left: 12px; font-size: 14px; color: #444; z-index: 2; }
   label { cursor: pointer; }
-  canvas { display: block; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #info {
+    position: fixed; top: 14px; left: 14px; z-index: 5;
+    width: min(250px, calc(100vw - 28px)); box-sizing: border-box;
+    padding: 14px; border-radius: 14px; color: #292929;
+    background: rgba(255,255,255,.94); box-shadow: 0 5px 24px rgba(0,0,0,.16);
+    backdrop-filter: blur(10px); font-size: 14px;
+  }
+  .panel-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:15px; }
+  #info label { display:flex; align-items:center; gap:9px; min-height:38px; cursor:pointer; }
+  #info input { width:19px; height:19px; accent-color:#8a2638; }
+  #info button, #menuToggle {
+    border:0; border-radius:9px; padding:10px 12px; background:#792337;
+    color:white; font:inherit; font-weight:600; cursor:pointer;
+  }
+  #closePanel { padding:2px 9px !important; font-size:22px !important; background:#eee !important; color:#333 !important; }
+  .panel-actions { margin-top:8px; }
+  .help { margin:10px 0 0; color:#666; font-size:12px; line-height:1.4; }
+  #menuToggle { display:none; position:fixed; top: max(12px, env(safe-area-inset-top)); left:12px; z-index:6; box-shadow:0 3px 14px #0002; }
+  @media (max-width: 700px) {
+    #menuToggle { display:block; }
+    #info { top: max(58px, calc(env(safe-area-inset-top) + 52px)); left:12px; }
+    #info.closed { display:none; }
+    #info label { min-height:44px; font-size:15px; }
+    #info input { width:22px; height:22px; }
+    #info button { min-height:42px; }
+  }
+  @media (max-width: 380px) {
+    #info { width:calc(100vw - 24px); }
+  }
 </style>
 </head>
 <body>
+<button id="menuToggle" type="button" aria-expanded="true" aria-controls="info">☰ Opciones</button>
 <div id="info">
-  <label><input type="checkbox" id="patas" checked> Patas puestas</label><br>
-  <label><input type="checkbox" id="medidas" checked> Mostrar medidas</label><br>
-  <label><input type="checkbox" id="vestir" checked> Mesa vestida</label><br>
-  Arrastra para girar, rueda para zoom
+  <div class="panel-head">
+    <strong>Vista de la mesa</strong>
+    <button id="closePanel" type="button" aria-label="Cerrar opciones">×</button>
+  </div>
+  <label><input type="checkbox" id="patas" checked> Patas puestas</label>
+  <label><input type="checkbox" id="medidas" checked> Mostrar medidas</label>
+  <label><input type="checkbox" id="vestir" checked> Mesa vestida</label>
+  <div class="panel-actions">
+    <button id="resetView" type="button">Centrar vista</button>
+  </div>
+  <p class="help">Mueve un dedo para girar · Pellizca para zoom</p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -353,8 +390,9 @@ vestido.add(tapete);
 
 scene.add(new THREE.GridHelper(600, 24, 0x999999, 0xcccccc));
 
-// Camara orbital
+// Camara orbital: controles adaptados a raton y pantalla tactil
 var th = -0.7, ph = 1.15, r = 620, tgt = new THREE.Vector3(30, 70, 0);
+var vistaInicial = { th: th, ph: ph, r: r };
 function upd() {
   cam.position.set(
     tgt.x + r * Math.sin(ph) * Math.sin(th),
@@ -364,27 +402,64 @@ function upd() {
   cam.lookAt(tgt);
   ren.render(scene, cam);
 }
-var drag = false, lx = 0, ly = 0;
-ren.domElement.addEventListener('pointerdown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; });
-addEventListener('pointerup', function () { drag = false; });
-addEventListener('pointermove', function (e) {
-  if (!drag) return;
-  th -= (e.clientX - lx) * 0.008;
-  ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - ly) * 0.008));
-  lx = e.clientX; ly = e.clientY;
+var pointers = new Map();
+var lastX = 0, lastY = 0, lastPinch = 0;
+function distanciaPunteros() {
+  var pts = Array.from(pointers.values());
+  if (pts.length < 2) return 0;
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+ren.domElement.addEventListener('pointerdown', function (e) {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  ren.domElement.setPointerCapture(e.pointerId);
+  lastX = e.clientX; lastY = e.clientY;
+  if (pointers.size === 2) lastPinch = distanciaPunteros();
+});
+ren.domElement.addEventListener('pointermove', function (e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size >= 2) {
+    var d = distanciaPunteros();
+    if (lastPinch) r = Math.max(250, Math.min(1400, r - (d - lastPinch) * 1.4));
+    lastPinch = d;
+  } else {
+    th -= (e.clientX - lastX) * 0.008;
+    ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - lastY) * 0.008));
+  }
+  lastX = e.clientX; lastY = e.clientY;
   upd();
 });
+function soltarPuntero(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) lastPinch = 0;
+}
+ren.domElement.addEventListener('pointerup', soltarPuntero);
+ren.domElement.addEventListener('pointercancel', soltarPuntero);
 ren.domElement.addEventListener('wheel', function (e) {
   e.preventDefault();
   r = Math.max(250, Math.min(1400, r + e.deltaY * 0.5));
   upd();
 }, { passive: false });
+
+document.getElementById('menuToggle').addEventListener('click', function () {
+  document.getElementById('info').classList.toggle('closed');
+  this.setAttribute('aria-expanded', !document.getElementById('info').classList.contains('closed'));
+});
+document.getElementById('closePanel').addEventListener('click', function () {
+  document.getElementById('info').classList.add('closed');
+  document.getElementById('menuToggle').setAttribute('aria-expanded', 'false');
+});
+document.getElementById('resetView').addEventListener('click', function () {
+  th = vistaInicial.th; ph = vistaInicial.ph; r = vistaInicial.r;
+  upd();
+});
 addEventListener('resize', function () {
   cam.aspect = innerWidth / innerHeight;
   cam.updateProjectionMatrix();
   ren.setSize(innerWidth, innerHeight);
   upd();
 });
+
 document.getElementById('patas').addEventListener('change', function (e) {
   grupoPatas.visible = e.target.checked;
   upd();
@@ -401,3 +476,4 @@ upd();
 </script>
 </body>
 </html>
+
