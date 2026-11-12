@@ -8,52 +8,28 @@
   html, body { margin: 0; height: 100%; background: #f4f3ef; font-family: system-ui, sans-serif; }
   #info { position: fixed; top: 10px; left: 12px; font-size: 14px; color: #444; z-index: 2; }
   label { cursor: pointer; }
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-  #info {
-    position: fixed; top: 14px; left: 14px; z-index: 5;
-    width: min(250px, calc(100vw - 28px)); box-sizing: border-box;
-    padding: 14px; border-radius: 14px; color: #292929;
-    background: rgba(255,255,255,.94); box-shadow: 0 5px 24px rgba(0,0,0,.16);
-    backdrop-filter: blur(10px); font-size: 14px;
-  }
-  .panel-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:15px; }
-  #info label { display:flex; align-items:center; gap:9px; min-height:38px; cursor:pointer; }
-  #info input { width:19px; height:19px; accent-color:#8a2638; }
-  #info button, #menuToggle {
-    border:0; border-radius:9px; padding:10px 12px; background:#792337;
-    color:white; font:inherit; font-weight:600; cursor:pointer;
-  }
-  #closePanel { padding:2px 9px !important; font-size:22px !important; background:#eee !important; color:#333 !important; }
-  .panel-actions { margin-top:8px; }
-  .help { margin:10px 0 0; color:#666; font-size:12px; line-height:1.4; }
-  #menuToggle { display:none; position:fixed; top: max(12px, env(safe-area-inset-top)); left:12px; z-index:6; box-shadow:0 3px 14px #0002; }
-  @media (max-width: 700px) {
-    #menuToggle { display:block; }
-    #info { top: max(58px, calc(env(safe-area-inset-top) + 52px)); left:12px; }
-    #info.closed { display:none; }
-    #info label { min-height:44px; font-size:15px; }
-    #info input { width:22px; height:22px; }
-    #info button { min-height:42px; }
-  }
-  @media (max-width: 380px) {
-    #info { width:calc(100vw - 24px); }
-  }
+  #info { background: rgba(255,255,255,.88); padding: 10px 12px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  #info h4 { margin: 8px 0 4px; font-size: 13px; }
+  #info .fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; cursor: default; }
+  #info .fila input { width: 64px; padding: 2px 4px; font-size: 14px; text-align: right; }
+  #info .fila span { white-space: nowrap; }
+  canvas { display: block; }
 </style>
 </head>
 <body>
-<button id="menuToggle" type="button" aria-expanded="true" aria-controls="info">☰ Opciones</button>
 <div id="info">
-  <div class="panel-head">
-    <strong>Vista de la mesa</strong>
-    <button id="closePanel" type="button" aria-label="Cerrar opciones">×</button>
-  </div>
-  <label><input type="checkbox" id="patas" checked> Patas puestas</label>
-  <label><input type="checkbox" id="medidas" checked> Mostrar medidas</label>
-  <label><input type="checkbox" id="vestir" checked> Mesa vestida</label>
-  <div class="panel-actions">
-    <button id="resetView" type="button">Centrar vista</button>
-  </div>
-  <p class="help">Mueve un dedo para girar · Pellizca para zoom</p>
+  <label><input type="checkbox" id="patas" checked> Patas puestas</label><br>
+  <label><input type="checkbox" id="medidas" checked> Mostrar medidas</label><br>
+  <label><input type="checkbox" id="vestir" checked> Mesa vestida</label><br>
+  <h4>Medidas (cm)</h4>
+  <label class="fila"><span>Largo del tablero</span><input type="number" min="20" step="1" data-m="tableroLargo"></label>
+  <label class="fila"><span>Ancho del tablero</span><input type="number" min="20" step="1" data-m="tableroAncho"></label>
+  <label class="fila"><span>Alto de las patas</span><input type="number" min="20" step="1" data-m="patasAlto"></label>
+  <label class="fila"><span>Viga larga</span><input type="number" min="20" step="1" data-m="vigaLargo"></label>
+  <label class="fila"><span>Separación viga-marco</span><input type="number" min="0" step="1" data-m="vigaSeparacion"></label>
+  <label class="fila"><span>Tela: altura sobre el suelo</span><input type="number" min="0" step="1" data-m="faldonSuelo"></label>
+  <div style="font-size:12px;color:#666">Tela a 0 = llega hasta el suelo</div>
+  <div style="margin-top:6px">Arrastra para girar, rueda para zoom</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -86,7 +62,7 @@ var MEDIDAS = {
   pasadorAltura: 14,      // altura del pasador desde el final de la pata hacia abajo (supuesto)
 
   // Vestido de la mesa (como en la foto del paso)
-  faldonSuelo: 20         // altura a la que acaba el faldon respecto al suelo (supuesto)
+  faldonSuelo: 0          // altura a la que acaba la tela respecto al suelo (0 = hasta el suelo)
 };
 
 var COLORES = { madera: 0xd9b98a, metal: 0x8a8f96 };
@@ -110,10 +86,24 @@ function box(w, h, d, col, x, y, z, parent) {
   var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: col }));
   m.position.set(x, y, z);
   m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x333333 })));
-  (parent || scene).add(m);
+  (parent || modelo).add(m);
   return m;
 }
 
+var modelo = null, grupoPatas, grupoMedidas, vestido;
+function liberar(o) {
+  o.traverse(function (n) {
+    if (n.geometry) n.geometry.dispose();
+    if (n.material) {
+      if (n.material.map) n.material.map.dispose();
+      n.material.dispose();
+    }
+  });
+}
+function construir() {
+  if (modelo) { scene.remove(modelo); liberar(modelo); }
+  modelo = new THREE.Group();
+  scene.add(modelo);
 var L = M.tableroLargo, A = M.tableroAncho;
 var yMarco = M.patasAlto + M.perfilAlto * 1.5;
 var yTablero = M.patasAlto + M.perfilAlto * 2 + M.tableroGrosor / 2;
@@ -138,8 +128,8 @@ box(M.perfilAncho, M.perfilAlto, A - 2 * M.perfilAncho, COLORES.metal, (L / 2 - 
 // Tablero
 box(L, M.tableroGrosor, A, COLORES.madera, 0, yTablero, 0);
 // Patas desmontables: casquillos fijos al marco, patas y pasadores que se quitan
-var grupoPatas = new THREE.Group();
-scene.add(grupoPatas);
+grupoPatas = new THREE.Group();
+modelo.add(grupoPatas);
 var yBajoMarco = yMarco - M.perfilAlto / 2;            // cara inferior del marco
 var yCasquillo = yBajoMarco - M.casquilloAlto / 2;
 var matPasador = new THREE.MeshLambertMaterial({ color: 0xd4a02a });
@@ -160,8 +150,8 @@ var matPasador = new THREE.MeshLambertMaterial({ color: 0xd4a02a });
 });
 
 // Medidas escritas sobre el modelo (se actualizan solas con los valores de MEDIDAS)
-var grupoMedidas = new THREE.Group();
-scene.add(grupoMedidas);
+grupoMedidas = new THREE.Group();
+modelo.add(grupoMedidas);
 function etiqueta(texto, x, y, z) {
   var c = document.createElement('canvas');
   c.width = 320; c.height = 72;
@@ -172,7 +162,9 @@ function etiqueta(texto, x, y, z) {
   g.lineWidth = 3;
   g.strokeRect(1.5, 1.5, 317, 69);
   g.fillStyle = '#b3261e';
-  g.font = 'bold 40px sans-serif';
+  var tam = 40;
+  g.font = 'bold ' + tam + 'px sans-serif';
+  while (g.measureText(texto).width > 300 && tam > 14) { tam -= 2; g.font = 'bold ' + tam + 'px sans-serif'; }
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(texto, 160, 38);
@@ -207,6 +199,10 @@ cota(V(-L / 2, yTope + 6, A / 2 + 6), V(L / 2, yTope + 6, A / 2 + 6), L + ' cm',
 cota(V(L / 2 + 8, yTope + 6, -A / 2), V(L / 2 + 8, yTope + 6, A / 2), A + ' cm', V(0, 4, 0));
 // Viga larga
 cota(V(-M.vigaLargo / 2, yMarco - 14, zViga), V(M.vigaLargo / 2, yMarco - 14, zViga), M.vigaLargo + ' cm', V(0, 4, 0));
+// Ancho total de un brazo (viga) a otro, de borde exterior a borde exterior
+var anchoBrazos = A + 2 * (M.vigaSeparacion + M.perfilAncho);
+var zBr = anchoBrazos / 2;
+cota(V(M.vigaLargo / 2 + 14, yMarco, -zBr), V(M.vigaLargo / 2 + 14, yMarco, zBr), anchoBrazos + ' cm (brazo a brazo)', V(4, 0, 0));
 // Altura de las patas
 cota(V(M.patasX + 14, 0, M.patasZ), V(M.patasX + 14, M.patasAlto, M.patasZ), M.patasAlto + ' cm', V(4, 0, 0));
 // Cuadrado del marco
@@ -214,8 +210,8 @@ etiqueta('cuadrado de ' + M.perfilAlto + 'x' + M.perfilAncho + ' cm', -L / 2 - 3
 
 // Mesa vestida con telas parecidas a las de la foto del paso:
 // damasco granate con dibujo y pliegues, fleco dorado colgante, galones y ribete dorado, terciopelo en el tablero
-var vestido = new THREE.Group();
-scene.add(vestido);
+vestido = new THREE.Group();
+modelo.add(vestido);
 
 function lienzo(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 function aTextura(c, repX, repY) {
@@ -337,10 +333,13 @@ function texTerciopelo() {
   return aTextura(c, 6, 6);
 }
 
+// La tela rodea el tablero y tapa las patas con sus casquillos (no tapa las vigas laterales)
+var EX = Math.max(L / 2, M.patasX + M.casquilloAncho / 2);
+var EZ = Math.max(A / 2, M.patasZ + M.casquilloFondo / 2);
 var yInfTablero = yTablero - M.tableroGrosor / 2;
 var altoFaldon = yInfTablero - M.faldonSuelo;
 var yFaldon = M.faldonSuelo + altoFaldon / 2;
-var zf = A / 2 + 1.5, xf = L / 2 + 1.5;
+var zf = EZ + 1.5, xf = EX + 1.5;
 var altoFleco = 12;
 
 function plano(ancho, alto, tex, x, y, z, giroY, conAlfa) {
@@ -353,10 +352,10 @@ function plano(ancho, alto, tex, x, y, z, giroY, conAlfa) {
 }
 function cuatroLados(alto, y, desplazamiento, fabricaTextura, conAlfa) {
   var lados = [
-    { w: L + 3, x: 0, z: zf + desplazamiento, r: 0 },
-    { w: L + 3, x: 0, z: -(zf + desplazamiento), r: Math.PI },
-    { w: A + 3, x: xf + desplazamiento, z: 0, r: Math.PI / 2 },
-    { w: A + 3, x: -(xf + desplazamiento), z: 0, r: -Math.PI / 2 }
+    { w: 2 * EX + 3, x: 0, z: zf + desplazamiento, r: 0 },
+    { w: 2 * EX + 3, x: 0, z: -(zf + desplazamiento), r: Math.PI },
+    { w: 2 * EZ + 3, x: xf + desplazamiento, z: 0, r: Math.PI / 2 },
+    { w: 2 * EZ + 3, x: -(xf + desplazamiento), z: 0, r: -Math.PI / 2 }
   ];
   lados.forEach(function (l) { plano(l.w, alto, fabricaTextura(l.w), l.x, y, l.z, l.r, conAlfa); });
 }
@@ -388,11 +387,41 @@ tapete.rotation.x = -Math.PI / 2;
 tapete.position.set(0, yTope + 0.5, 0);
 vestido.add(tapete);
 
+// Linea dorada vertical en cada esquina de la tela, de arriba abajo
+var oroLinea = new THREE.MeshLambertMaterial({ color: 0xc9a227 });
+[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (c) {
+  var linea = new THREE.Mesh(new THREE.BoxGeometry(2.4, altoFaldon, 2.4), oroLinea);
+  linea.position.set(c[0] * (xf + 0.3), yFaldon, c[1] * (zf + 0.3));
+  vestido.add(linea);
+});
+
+// Brazos laterales (vigas) y sus uniones forrados con tela roja
+function forroRojo(w, h, d, x, y, z) {
+  var m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ map: texTerciopelo() })
+  );
+  m.position.set(x, y, z);
+  vestido.add(m);
+}
+var forro = 0.8; // grosor de la tela alrededor del perfil
+[-1, 1].forEach(function (lado) {
+  forroRojo(M.vigaLargo + forro * 2, M.perfilAlto + forro * 2, M.perfilAncho + forro * 2, 0, yMarco, lado * zViga);
+  unionesX.forEach(function (x) {
+    forroRojo(M.perfilAncho + forro * 2, M.perfilAlto + forro * 2, M.vigaSeparacion, x, yMarco, lado * (A / 2 + M.vigaSeparacion / 2));
+  });
+});
+
+  grupoPatas.visible = document.getElementById('patas').checked;
+  grupoMedidas.visible = document.getElementById('medidas').checked;
+  vestido.visible = document.getElementById('vestir').checked;
+}
+construir();
+
 scene.add(new THREE.GridHelper(600, 24, 0x999999, 0xcccccc));
 
-// Camara orbital: controles adaptados a raton y pantalla tactil
+// Camara orbital
 var th = -0.7, ph = 1.15, r = 620, tgt = new THREE.Vector3(30, 70, 0);
-var vistaInicial = { th: th, ph: ph, r: r };
 function upd() {
   cam.position.set(
     tgt.x + r * Math.sin(ph) * Math.sin(th),
@@ -402,64 +431,27 @@ function upd() {
   cam.lookAt(tgt);
   ren.render(scene, cam);
 }
-var pointers = new Map();
-var lastX = 0, lastY = 0, lastPinch = 0;
-function distanciaPunteros() {
-  var pts = Array.from(pointers.values());
-  if (pts.length < 2) return 0;
-  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-}
-ren.domElement.addEventListener('pointerdown', function (e) {
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  ren.domElement.setPointerCapture(e.pointerId);
-  lastX = e.clientX; lastY = e.clientY;
-  if (pointers.size === 2) lastPinch = distanciaPunteros();
-});
-ren.domElement.addEventListener('pointermove', function (e) {
-  if (!pointers.has(e.pointerId)) return;
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pointers.size >= 2) {
-    var d = distanciaPunteros();
-    if (lastPinch) r = Math.max(250, Math.min(1400, r - (d - lastPinch) * 1.4));
-    lastPinch = d;
-  } else {
-    th -= (e.clientX - lastX) * 0.008;
-    ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - lastY) * 0.008));
-  }
-  lastX = e.clientX; lastY = e.clientY;
+var drag = false, lx = 0, ly = 0;
+ren.domElement.addEventListener('pointerdown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', function () { drag = false; });
+addEventListener('pointermove', function (e) {
+  if (!drag) return;
+  th -= (e.clientX - lx) * 0.008;
+  ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - ly) * 0.008));
+  lx = e.clientX; ly = e.clientY;
   upd();
 });
-function soltarPuntero(e) {
-  pointers.delete(e.pointerId);
-  if (pointers.size < 2) lastPinch = 0;
-}
-ren.domElement.addEventListener('pointerup', soltarPuntero);
-ren.domElement.addEventListener('pointercancel', soltarPuntero);
 ren.domElement.addEventListener('wheel', function (e) {
   e.preventDefault();
   r = Math.max(250, Math.min(1400, r + e.deltaY * 0.5));
   upd();
 }, { passive: false });
-
-document.getElementById('menuToggle').addEventListener('click', function () {
-  document.getElementById('info').classList.toggle('closed');
-  this.setAttribute('aria-expanded', !document.getElementById('info').classList.contains('closed'));
-});
-document.getElementById('closePanel').addEventListener('click', function () {
-  document.getElementById('info').classList.add('closed');
-  document.getElementById('menuToggle').setAttribute('aria-expanded', 'false');
-});
-document.getElementById('resetView').addEventListener('click', function () {
-  th = vistaInicial.th; ph = vistaInicial.ph; r = vistaInicial.r;
-  upd();
-});
 addEventListener('resize', function () {
   cam.aspect = innerWidth / innerHeight;
   cam.updateProjectionMatrix();
   ren.setSize(innerWidth, innerHeight);
   upd();
 });
-
 document.getElementById('patas').addEventListener('change', function (e) {
   grupoPatas.visible = e.target.checked;
   upd();
@@ -471,6 +463,17 @@ document.getElementById('medidas').addEventListener('change', function (e) {
 document.getElementById('vestir').addEventListener('change', function (e) {
   vestido.visible = e.target.checked;
   upd();
+});
+document.querySelectorAll('#info input[data-m]').forEach(function (inp) {
+  inp.value = M[inp.dataset.m];
+  inp.addEventListener('input', function () {
+    var v = parseFloat(inp.value);
+    if (isNaN(v) || v < 0) return;
+    if (inp.dataset.m !== 'faldonSuelo' && inp.dataset.m !== 'vigaSeparacion' && v < 20) return;
+    M[inp.dataset.m] = v;
+    construir();
+    upd();
+  });
 });
 upd();
 </script>
