@@ -51,7 +51,17 @@
     <label class="fila"><span>Giro (°)</span><input type="number" step="5" data-o="giro"></label>
     <label class="fila"><span>Elevación (cm)</span><input type="number" step="1" data-o="elev"></label>
     <button id="objBorrar" type="button" style="margin-top:4px">Eliminar objeto</button>
-    <div style="font-size:12px;color:#666;margin-top:3px">También puedes arrastrarlo con el ratón sobre la mesa</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
+      <button id="objSeleccionarTodos" type="button">Seleccionar todos</button>
+      <button id="objDeseleccionar" type="button">Deseleccionar</button>
+    </div>
+    <div style="font-size:12px;color:#666;margin-top:5px">
+      También puedes arrastrar los objetos con el ratón sobre la mesa.
+      <br><b>Atajos de teclado o métodos abreviados de teclado:</b>
+      <br>Ctrl + A: seleccionar todos los objetos.
+      <br>Esc: quitar la selección.
+      <br>Mayús + clic: añadir un objeto a la selección.
+    </div>
   </div>
   <div style="margin-top:6px">Arrastra para girar, rueda para zoom</div>
   </div>
@@ -534,7 +544,7 @@ document.getElementById('restablecer').addEventListener('click', function () {
    OBJETOS ESCANEADOS (.glb): escala en cm, anchura, mover, girar, borrar.
    Los modelos se guardan en IndexedDB y los ajustes en localStorage.
    ============================================================ */
-var objetos = [], objSel = null, selBox = null;
+var objetos = [], objSel = null, selBox = null, objetosSeleccionados = [], cajasSeleccion = [];
 var grupoObjetos = new THREE.Group();
 scene.add(grupoObjetos);
 var CLAVE_AJ = 'mesa3d-objetos-ajustes';
@@ -647,12 +657,51 @@ function cargarCampos() {
   });
   cargarAnchura();
 }
-function seleccionar(o) {
-  objSel = o || null;
-  if (selBox) { scene.remove(selBox); selBox.geometry.dispose(); selBox.material.dispose(); selBox = null; }
-  if (objSel) { selBox = new THREE.BoxHelper(objSel.pivot, 0xb3261e); scene.add(selBox); }
+function limpiarCajasSeleccion() {
+  if (selBox) {
+    scene.remove(selBox);
+    selBox.geometry.dispose();
+    selBox.material.dispose();
+    selBox = null;
+  }
+  cajasSeleccion.forEach(function (caja) {
+    scene.remove(caja);
+    caja.geometry.dispose();
+    caja.material.dispose();
+  });
+  cajasSeleccion = [];
+}
+function actualizarCajasSeleccion() {
+  limpiarCajasSeleccion();
+  objetosSeleccionados.forEach(function (o, i) {
+    var caja = new THREE.BoxHelper(o.pivot, i === 0 ? 0xb3261e : 0x1976d2);
+    scene.add(caja);
+    if (o === objSel) selBox = caja;
+    else cajasSeleccion.push(caja);
+  });
+}
+function seleccionar(o, acumular) {
+  if (acumular && o) {
+    var indice = objetosSeleccionados.indexOf(o);
+    if (indice >= 0) objetosSeleccionados.splice(indice, 1);
+    else objetosSeleccionados.push(o);
+    objSel = objetosSeleccionados.length ? objetosSeleccionados[objetosSeleccionados.length - 1] : null;
+  } else {
+    objSel = o || null;
+    objetosSeleccionados = objSel ? [objSel] : [];
+  }
+  actualizarCajasSeleccion();
   refrescarLista();
   cargarCampos();
+  upd();
+}
+function seleccionarTodos() {
+  objetosSeleccionados = objetos.slice();
+  objSel = objetosSeleccionados.length ? objetosSeleccionados[0] : null;
+  actualizarCajasSeleccion();
+  refrescarLista();
+  cargarCampos();
+  estado(objetosSeleccionados.length + ' objeto(s) seleccionado(s).');
   upd();
 }
 function porId(id) { return objetos.filter(function (o) { return o.id === id; })[0]; }
@@ -735,6 +784,24 @@ function quitarObjeto(o) {
 }
 document.getElementById('objBorrar').addEventListener('click', function () {
   if (objSel) quitarObjeto(objSel);
+});
+document.getElementById('objSeleccionarTodos').addEventListener('click', seleccionarTodos);
+document.getElementById('objDeseleccionar').addEventListener('click', function () {
+  seleccionar(null);
+  estado('');
+});
+
+// Atajos de teclado: Ctrl+A selecciona todos los objetos y Esc limpia la selección.
+addEventListener('keydown', function (e) {
+  var etiqueta = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+  var escribiendo = etiqueta === 'input' || etiqueta === 'textarea' || etiqueta === 'select' || (e.target && e.target.isContentEditable);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !escribiendo) {
+    e.preventDefault();
+    seleccionarTodos();
+  } else if (e.key === 'Escape') {
+    seleccionar(null);
+    estado('');
+  }
 });
 
 // Arrastrar un objeto con el ratón sobre la mesa
