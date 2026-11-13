@@ -568,8 +568,13 @@ function dbOp(modo, fn) {
 function yTopeActual() { return M.patasAlto + M.perfilAlto * 2 + M.tableroGrosor; }
 function aplicar(o) {
   var s = o.tamano / o.mayor;
-  // La anchura (eje X local del objeto) se estira con ax; alto y fondo mantienen la escala uniforme
-  o.pivot.scale.set(s * o.ax, s, s);
+  // En objetos redondos, la anchura se aplica por igual a X y Z
+  // para conservar la forma circular. En objetos alargados solo se modifica X.
+  if (o.redondo) {
+    o.pivot.scale.set(s * o.ax, s, s * o.ax);
+  } else {
+    o.pivot.scale.set(s * o.ax, s, s);
+  }
   o.pivot.rotation.y = o.giro * Math.PI / 180;
   o.pivot.position.set(o.x, yTopeActual() + 0.5 + o.elev, o.z);
   o.pivot.updateMatrixWorld(true);
@@ -597,6 +602,9 @@ function crearObjeto(id, nombre, buf, aj) {
         id: id, nombre: nombre, pivot: pivot,
         mayor: Math.max(tam.x, tam.y, tam.z) || 1,
         ancho0: tam.x || 1,                          // anchura original del modelo (eje X)
+        // Considera redondo el objeto si su huella X/Z tiene proporciones similares.
+        // Así, al cambiar la anchura, mantiene el diámetro circular en ambos ejes.
+        redondo: Math.max(tam.x, tam.z) / Math.max(0.0001, Math.min(tam.x, tam.z)) <= 1.15,
         tamano: aj.tamano, x: aj.x, z: aj.z, giro: aj.giro, elev: aj.elev,
         ax: (typeof aj.ax === 'number' && isFinite(aj.ax) && aj.ax > 0) ? aj.ax : 1
       };
