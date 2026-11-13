@@ -1,29 +1,29 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mesa - plano 3D</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #f4f3ef; font-family: system-ui, sans-serif; overflow: hidden; overscroll-behavior: none; }
-  #info { position: fixed; top: 10px; left: 12px; font-size: 14px; color: #444; z-index: 2; max-height: calc(100vh - 44px); overflow-y: auto; box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #f4f3ef; font-family: system-ui, sans-serif; }
+  #info { position: fixed; top: 10px; left: 12px; font-size: 14px; color: #444; z-index: 2; }
   label { cursor: pointer; }
   #info { background: rgba(255,255,255,.88); padding: 10px 12px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
   #info h4 { margin: 8px 0 4px; font-size: 13px; }
   #info .fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; cursor: default; }
-  #info .fila input { width: 64px; padding: 2px 4px; font-size: 16px; text-align: right; }
+  #info .fila input { width: 64px; padding: 2px 4px; font-size: 14px; text-align: right; }
   #info .fila span { white-space: nowrap; }
-  #btnMenu { display: block; width: 100%; padding: 4px 8px; font-size: 14px; cursor: pointer; border: 1px solid #ccc; border-radius: 6px; background: #fff; text-align: left; }
-  #info.cerrado { padding: 6px; }
-  #info.cerrado #contenido { display: none; }
-  #info.cerrado #btnMenu { width: auto; }
-  canvas { display: block; touch-action: none; }
+  #alternarMenu { padding: 3px 8px; font-size: 13px; cursor: pointer; margin-bottom: 6px; }
+  #info.oculto { padding: 6px; }
+  #info.oculto #contenido { display: none; }
+  #info.oculto #alternarMenu { margin-bottom: 0; }
+  canvas { display: block; }
 </style>
 </head>
 <body>
 <div id="info">
-  <button id="btnMenu" type="button">☰ Ocultar menú</button>
-  <div id="contenido" style="margin-top:8px">
+  <button id="alternarMenu" type="button" title="Ocultar o mostrar el menú">☰ Menú</button>
+  <div id="contenido">
   <label><input type="checkbox" id="patas" checked> Patas puestas</label><br>
   <label><input type="checkbox" id="medidas" checked> Mostrar medidas</label><br>
   <label><input type="checkbox" id="vestir" checked> Mesa vestida</label><br>
@@ -35,6 +35,8 @@
   <label class="fila"><span>Separación viga-marco</span><input type="number" min="0" step="1" data-m="vigaSeparacion"></label>
   <label class="fila"><span>Tela: altura sobre el suelo</span><input type="number" min="0" step="1" data-m="faldonSuelo"></label>
   <div style="font-size:12px;color:#666">Tela a 0 = llega hasta el suelo</div>
+  <div style="font-size:12px;color:#666;margin-top:4px">Las medidas se guardan solas en este navegador</div>
+  <button id="restablecer" type="button" style="margin-top:6px;padding:3px 8px;font-size:12px;cursor:pointer">Restablecer medidas</button>
   <div style="margin-top:6px">Arrastra para girar, rueda para zoom</div>
   </div>
 </div>
@@ -76,12 +78,26 @@ var COLORES = { madera: 0xd9b98a, metal: 0x8a8f96 };
 /* ============================================================ */
 
 var M = MEDIDAS;
+
+// Guardado de medidas en el navegador (localStorage)
+var CLAVE_GUARDADO = 'mesa3d-medidas';
+var POR_DEFECTO = JSON.parse(JSON.stringify(MEDIDAS));
+try {
+  var guardado = JSON.parse(localStorage.getItem(CLAVE_GUARDADO) || '{}');
+  Object.keys(guardado).forEach(function (k) {
+    if (k in M && typeof guardado[k] === 'number' && isFinite(guardado[k])) M[k] = guardado[k];
+  });
+} catch (e) {}
+function guardarMedidas() {
+  try { localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(M)); } catch (e) {}
+}
+
 var scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf4f3ef);
 var cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 1, 4000);
 var ren = new THREE.WebGLRenderer({ antialias: true });
 ren.setSize(innerWidth, innerHeight);
-ren.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+ren.setPixelRatio(Math.min(devicePixelRatio, 2));
 document.body.appendChild(ren.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.65));
@@ -96,143 +112,6 @@ function box(w, h, d, col, x, y, z, parent) {
   (parent || modelo).add(m);
   return m;
 }
-
-function lienzo(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-function aTextura(c, repX, repY) {
-  var t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  t.repeat.set(repX, repY);
-  return t;
-}
-function flor(g, cx, cy, r, colPetalo, colCentro) {
-  for (var i = 0; i < 8; i++) {
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(i * Math.PI / 4);
-    g.fillStyle = colPetalo;
-    g.beginPath();
-    g.ellipse(0, -r * 0.55, r * 0.28, r * 0.55, 0, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
-  }
-  g.fillStyle = colCentro;
-  g.beginPath();
-  g.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
-  g.fill();
-}
-// Damasco granate: fondo, rombos, flores, hojas y pliegue vertical
-function dibDamasco(repX, repY) {
-  var c = lienzo(256, 256), g = c.getContext('2d');
-  g.fillStyle = '#7a1223';
-  g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = 'rgba(200,85,100,0.38)';
-  g.lineWidth = 5;
-  g.beginPath();
-  g.moveTo(128, 0); g.lineTo(256, 128); g.lineTo(128, 256); g.lineTo(0, 128); g.closePath();
-  g.stroke();
-  flor(g, 128, 128, 70, 'rgba(176,52,68,0.65)', 'rgba(215,110,120,0.7)');
-  [[0, 0], [256, 0], [0, 256], [256, 256]].forEach(function (p) {
-    flor(g, p[0], p[1], 52, 'rgba(176,52,68,0.6)', 'rgba(215,110,120,0.65)');
-  });
-  g.fillStyle = 'rgba(150,35,52,0.7)';
-  [[64, 64], [192, 64], [64, 192], [192, 192]].forEach(function (p) {
-    g.beginPath(); g.ellipse(p[0], p[1], 14, 26, Math.PI / 4, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(p[0], p[1], 14, 26, -Math.PI / 4, 0, Math.PI * 2); g.fill();
-  });
-  g.strokeStyle = 'rgba(0,0,0,0.05)';
-  g.lineWidth = 1;
-  for (var i = -256; i < 512; i += 4) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 256, 256); g.stroke(); }
-  var gr = g.createLinearGradient(0, 0, 256, 0);
-  gr.addColorStop(0, 'rgba(0,0,0,0.45)');
-  gr.addColorStop(0.5, 'rgba(255,190,190,0.14)');
-  gr.addColorStop(1, 'rgba(0,0,0,0.45)');
-  g.fillStyle = gr;
-  g.fillRect(0, 0, 256, 256);
-  return aTextura(c, repX, repY);
-}
-// Fleco dorado: cordon superior y hebras colgando
-function dibFleco(repX) {
-  var c = lienzo(128, 128), g = c.getContext('2d');
-  var tonos = ['#d8b13a', '#b8901f', '#f0cf6a', '#a8821a'];
-  g.fillStyle = '#c9a227';
-  g.fillRect(0, 0, 128, 24);
-  g.strokeStyle = '#7a5f10';
-  g.lineWidth = 2;
-  for (var x = -24; x < 128; x += 8) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 24, 24); g.stroke(); }
-  g.fillStyle = '#7a5f10';
-  g.fillRect(0, 22, 128, 3);
-  for (var i = 0; i < 128; i += 3) {
-    g.strokeStyle = tonos[(i / 3) % 4];
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(i + 1, 25);
-    g.lineTo(i + 1 + (i % 2 ? 1 : -1), 122);
-    g.stroke();
-    g.fillStyle = '#d8b13a';
-    g.beginPath(); g.arc(i + 1, 122, 1.6, 0, Math.PI * 2); g.fill();
-  }
-  return aTextura(c, repX, 1);
-}
-// Galon dorado trenzado
-function dibGalon(repX) {
-  var c = lienzo(64, 32), g = c.getContext('2d');
-  g.fillStyle = '#c9a227';
-  g.fillRect(0, 0, 64, 32);
-  g.strokeStyle = '#8a6d12';
-  g.lineWidth = 3;
-  for (var x = -32; x < 64; x += 10) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 32, 0); g.stroke(); }
-  g.strokeStyle = '#efd070';
-  g.lineWidth = 1.5;
-  for (var x2 = -27; x2 < 64; x2 += 10) { g.beginPath(); g.moveTo(x2, 32); g.lineTo(x2 + 32, 0); g.stroke(); }
-  g.fillStyle = '#7a5f10';
-  g.fillRect(0, 0, 64, 4); g.fillRect(0, 28, 64, 4);
-  return aTextura(c, repX, 1);
-}
-// Ribete dorado tallado (moldura)
-function dibRibete(repX) {
-  var c = lienzo(128, 64), g = c.getContext('2d');
-  g.fillStyle = '#c9a227';
-  g.fillRect(0, 0, 128, 64);
-  for (var i = 0; i < 4; i++) {
-    g.fillStyle = '#e3bf4a';
-    g.beginPath(); g.arc(16 + i * 32, 32, 14, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#7a5f10'; g.lineWidth = 2.5;
-    g.beginPath(); g.arc(16 + i * 32, 32, 14, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(16 + i * 32, 32, 6, 0, Math.PI * 2); g.stroke();
-  }
-  g.fillStyle = '#7a5f10';
-  g.fillRect(0, 0, 128, 5); g.fillRect(0, 59, 128, 5);
-  return aTextura(c, repX, 1);
-}
-// Terciopelo
-function dibTerciopelo() {
-  var c = lienzo(128, 128), g = c.getContext('2d');
-  g.fillStyle = '#6a0e1d';
-  g.fillRect(0, 0, 128, 128);
-  for (var i = 0; i < 900; i++) {
-    g.fillStyle = 'rgba(' + (i % 2 ? '255,120,130' : '0,0,0') + ',0.07)';
-    g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
-  }
-  return aTextura(c, 6, 6);
-}
-
-// Las texturas se dibujan una sola vez y se reutilizan (clonandolas) en cada reconstruccion
-var BASE = {};
-function memo(nombre, dibuja) {
-  return function (repX, repY) {
-    var base = BASE[nombre] || (BASE[nombre] = dibuja(1, 1));
-    var t = base.clone();
-    t.needsUpdate = true;
-    t.repeat.set(repX === undefined ? base.repeat.x : repX, repY === undefined ? base.repeat.y : repY);
-    return t;
-  };
-}
-var texDamasco = memo('damasco', dibDamasco);
-var texFleco = memo('fleco', dibFleco);
-var texGalon = memo('galon', dibGalon);
-var texRibete = memo('ribete', dibRibete);
-var texTerciopelo = memo('terciopelo', dibTerciopelo);
 
 var modelo = null, grupoPatas, grupoMedidas, vestido;
 function liberar(o) {
@@ -357,6 +236,126 @@ etiqueta('cuadrado de ' + M.perfilAlto + 'x' + M.perfilAncho + ' cm', -L / 2 - 3
 vestido = new THREE.Group();
 modelo.add(vestido);
 
+function lienzo(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function aTextura(c, repX, repY) {
+  var t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  t.repeat.set(repX, repY);
+  return t;
+}
+function flor(g, cx, cy, r, colPetalo, colCentro) {
+  for (var i = 0; i < 8; i++) {
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(i * Math.PI / 4);
+    g.fillStyle = colPetalo;
+    g.beginPath();
+    g.ellipse(0, -r * 0.55, r * 0.28, r * 0.55, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  g.fillStyle = colCentro;
+  g.beginPath();
+  g.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
+  g.fill();
+}
+// Damasco granate: fondo, rombos, flores, hojas y pliegue vertical
+function texDamasco(repX, repY) {
+  var c = lienzo(256, 256), g = c.getContext('2d');
+  g.fillStyle = '#7a1223';
+  g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = 'rgba(200,85,100,0.38)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.moveTo(128, 0); g.lineTo(256, 128); g.lineTo(128, 256); g.lineTo(0, 128); g.closePath();
+  g.stroke();
+  flor(g, 128, 128, 70, 'rgba(176,52,68,0.65)', 'rgba(215,110,120,0.7)');
+  [[0, 0], [256, 0], [0, 256], [256, 256]].forEach(function (p) {
+    flor(g, p[0], p[1], 52, 'rgba(176,52,68,0.6)', 'rgba(215,110,120,0.65)');
+  });
+  g.fillStyle = 'rgba(150,35,52,0.7)';
+  [[64, 64], [192, 64], [64, 192], [192, 192]].forEach(function (p) {
+    g.beginPath(); g.ellipse(p[0], p[1], 14, 26, Math.PI / 4, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(p[0], p[1], 14, 26, -Math.PI / 4, 0, Math.PI * 2); g.fill();
+  });
+  g.strokeStyle = 'rgba(0,0,0,0.05)';
+  g.lineWidth = 1;
+  for (var i = -256; i < 512; i += 4) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 256, 256); g.stroke(); }
+  var gr = g.createLinearGradient(0, 0, 256, 0);
+  gr.addColorStop(0, 'rgba(0,0,0,0.45)');
+  gr.addColorStop(0.5, 'rgba(255,190,190,0.14)');
+  gr.addColorStop(1, 'rgba(0,0,0,0.45)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 256, 256);
+  return aTextura(c, repX, repY);
+}
+// Fleco dorado: cordon superior y hebras colgando
+function texFleco(repX) {
+  var c = lienzo(128, 128), g = c.getContext('2d');
+  var tonos = ['#d8b13a', '#b8901f', '#f0cf6a', '#a8821a'];
+  g.fillStyle = '#c9a227';
+  g.fillRect(0, 0, 128, 24);
+  g.strokeStyle = '#7a5f10';
+  g.lineWidth = 2;
+  for (var x = -24; x < 128; x += 8) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 24, 24); g.stroke(); }
+  g.fillStyle = '#7a5f10';
+  g.fillRect(0, 22, 128, 3);
+  for (var i = 0; i < 128; i += 3) {
+    g.strokeStyle = tonos[(i / 3) % 4];
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(i + 1, 25);
+    g.lineTo(i + 1 + (i % 2 ? 1 : -1), 122);
+    g.stroke();
+    g.fillStyle = '#d8b13a';
+    g.beginPath(); g.arc(i + 1, 122, 1.6, 0, Math.PI * 2); g.fill();
+  }
+  return aTextura(c, repX, 1);
+}
+// Galon dorado trenzado
+function texGalon(repX) {
+  var c = lienzo(64, 32), g = c.getContext('2d');
+  g.fillStyle = '#c9a227';
+  g.fillRect(0, 0, 64, 32);
+  g.strokeStyle = '#8a6d12';
+  g.lineWidth = 3;
+  for (var x = -32; x < 64; x += 10) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 32, 0); g.stroke(); }
+  g.strokeStyle = '#efd070';
+  g.lineWidth = 1.5;
+  for (var x2 = -27; x2 < 64; x2 += 10) { g.beginPath(); g.moveTo(x2, 32); g.lineTo(x2 + 32, 0); g.stroke(); }
+  g.fillStyle = '#7a5f10';
+  g.fillRect(0, 0, 64, 4); g.fillRect(0, 28, 64, 4);
+  return aTextura(c, repX, 1);
+}
+// Ribete dorado tallado (moldura)
+function texRibete(repX) {
+  var c = lienzo(128, 64), g = c.getContext('2d');
+  g.fillStyle = '#c9a227';
+  g.fillRect(0, 0, 128, 64);
+  for (var i = 0; i < 4; i++) {
+    g.fillStyle = '#e3bf4a';
+    g.beginPath(); g.arc(16 + i * 32, 32, 14, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#7a5f10'; g.lineWidth = 2.5;
+    g.beginPath(); g.arc(16 + i * 32, 32, 14, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(16 + i * 32, 32, 6, 0, Math.PI * 2); g.stroke();
+  }
+  g.fillStyle = '#7a5f10';
+  g.fillRect(0, 0, 128, 5); g.fillRect(0, 59, 128, 5);
+  return aTextura(c, repX, 1);
+}
+// Terciopelo
+function texTerciopelo() {
+  var c = lienzo(128, 128), g = c.getContext('2d');
+  g.fillStyle = '#6a0e1d';
+  g.fillRect(0, 0, 128, 128);
+  for (var i = 0; i < 900; i++) {
+    g.fillStyle = 'rgba(' + (i % 2 ? '255,120,130' : '0,0,0') + ',0.07)';
+    g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+  }
+  return aTextura(c, 6, 6);
+}
+
 // La tela rodea el tablero y tapa las patas con sus casquillos (no tapa las vigas laterales)
 var EX = Math.max(L / 2, M.patasX + M.casquilloAncho / 2);
 var EZ = Math.max(A / 2, M.patasZ + M.casquilloFondo / 2);
@@ -446,56 +445,23 @@ scene.add(new THREE.GridHelper(600, 24, 0x999999, 0xcccccc));
 
 // Camara orbital
 var th = -0.7, ph = 1.15, r = 620, tgt = new THREE.Vector3(30, 70, 0);
-// En pantallas verticales se ensancha el campo de vision para que la mesa quepa
-function ajustarCamara() {
-  var asp = innerWidth / innerHeight;
-  cam.aspect = asp;
-  cam.fov = asp < 1 ? Math.min(100, 2 * Math.atan(Math.tan(20 * Math.PI / 180) / asp) * 180 / Math.PI) : 40;
-  cam.updateProjectionMatrix();
-}
-ajustarCamara();
-// Se dibuja como mucho una vez por fotograma, aunque lleguen muchos eventos
-var pendiente = false;
 function upd() {
-  if (pendiente) return;
-  pendiente = true;
-  requestAnimationFrame(function () {
-    pendiente = false;
-    cam.position.set(
-      tgt.x + r * Math.sin(ph) * Math.sin(th),
-      tgt.y + r * Math.cos(ph),
-      tgt.z + r * Math.sin(ph) * Math.cos(th)
-    );
-    cam.lookAt(tgt);
-    ren.render(scene, cam);
-  });
+  cam.position.set(
+    tgt.x + r * Math.sin(ph) * Math.sin(th),
+    tgt.y + r * Math.cos(ph),
+    tgt.z + r * Math.sin(ph) * Math.cos(th)
+  );
+  cam.lookAt(tgt);
+  ren.render(scene, cam);
 }
-// Un dedo gira, dos dedos hacen zoom (pellizco)
-var punteros = {}, distPrev = 0;
-ren.domElement.addEventListener('pointerdown', function (e) {
-  punteros[e.pointerId] = { x: e.clientX, y: e.clientY };
-  try { ren.domElement.setPointerCapture(e.pointerId); } catch (err) {}
-  distPrev = 0;
-});
-function soltar(e) { delete punteros[e.pointerId]; distPrev = 0; }
-addEventListener('pointerup', soltar);
-addEventListener('pointercancel', soltar);
+var drag = false, lx = 0, ly = 0;
+ren.domElement.addEventListener('pointerdown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', function () { drag = false; });
 addEventListener('pointermove', function (e) {
-  var p = punteros[e.pointerId];
-  if (!p) return;
-  var ids = Object.keys(punteros);
-  if (ids.length >= 2) {
-    p.x = e.clientX; p.y = e.clientY;
-    var a1 = punteros[ids[0]], b1 = punteros[ids[1]];
-    var d = Math.hypot(a1.x - b1.x, a1.y - b1.y);
-    if (distPrev && d > 0) r = Math.max(250, Math.min(1400, r * distPrev / d));
-    distPrev = d;
-    upd();
-    return;
-  }
-  th -= (e.clientX - p.x) * 0.008;
-  ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - p.y) * 0.008));
-  p.x = e.clientX; p.y = e.clientY;
+  if (!drag) return;
+  th -= (e.clientX - lx) * 0.008;
+  ph = Math.max(0.2, Math.min(1.5, ph - (e.clientY - ly) * 0.008));
+  lx = e.clientX; ly = e.clientY;
   upd();
 });
 ren.domElement.addEventListener('wheel', function (e) {
@@ -504,7 +470,8 @@ ren.domElement.addEventListener('wheel', function (e) {
   upd();
 }, { passive: false });
 addEventListener('resize', function () {
-  ajustarCamara();
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
   ren.setSize(innerWidth, innerHeight);
   upd();
 });
@@ -520,7 +487,6 @@ document.getElementById('vestir').addEventListener('change', function (e) {
   vestido.visible = e.target.checked;
   upd();
 });
-var temporizador = null;
 document.querySelectorAll('#info input[data-m]').forEach(function (inp) {
   inp.value = M[inp.dataset.m];
   inp.addEventListener('input', function () {
@@ -528,19 +494,25 @@ document.querySelectorAll('#info input[data-m]').forEach(function (inp) {
     if (isNaN(v) || v < 0) return;
     if (inp.dataset.m !== 'faldonSuelo' && inp.dataset.m !== 'vigaSeparacion' && v < 20) return;
     M[inp.dataset.m] = v;
-    clearTimeout(temporizador);
-    temporizador = setTimeout(function () { construir(); upd(); }, 200);
+    guardarMedidas();
+    construir();
+    upd();
   });
 });
-document.getElementById('btnMenu').addEventListener('click', function () {
-  var panel = document.getElementById('info');
-  var cerrado = panel.classList.toggle('cerrado');
-  this.textContent = cerrado ? '☰ Menú' : '☰ Ocultar menú';
+var CLAVE_MENU = 'mesa3d-menu-oculto';
+var panel = document.getElementById('info');
+try { if (localStorage.getItem(CLAVE_MENU) === '1') panel.classList.add('oculto'); } catch (e) {}
+document.getElementById('alternarMenu').addEventListener('click', function () {
+  var oculto = panel.classList.toggle('oculto');
+  try { localStorage.setItem(CLAVE_MENU, oculto ? '1' : '0'); } catch (e) {}
 });
-if (innerWidth < 700) {
-  document.getElementById('info').classList.add('cerrado');
-  document.getElementById('btnMenu').textContent = '☰ Menú';
-}
+document.getElementById('restablecer').addEventListener('click', function () {
+  try { localStorage.removeItem(CLAVE_GUARDADO); } catch (e) {}
+  Object.keys(POR_DEFECTO).forEach(function (k) { M[k] = POR_DEFECTO[k]; });
+  document.querySelectorAll('#info input[data-m]').forEach(function (inp) { inp.value = M[inp.dataset.m]; });
+  construir();
+  upd();
+});
 upd();
 </script>
 </body>
