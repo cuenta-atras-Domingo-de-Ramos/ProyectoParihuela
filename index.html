@@ -622,6 +622,9 @@ function guardarAjustes(o) {
   try { localStorage.setItem(CLAVE_AJ, JSON.stringify(ajustes)); } catch (e) {}
 }
 
+// Pide al navegador que NO borre los datos guardados (modelos .glb) por su cuenta
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+
 function abrirDB() {
   return new Promise(function (res, rej) {
     if (!window.indexedDB) { rej(new Error('Sin IndexedDB')); return; }
@@ -775,13 +778,17 @@ function porId(id) { return objetos.filter(function (o) { return o.id === id; })
 
 var POR_DEFECTO_OBJ = { tamano: 20, x: 0, z: 0, giro: 0, elev: 0, ax: 1 };
 
+// Guarda el objeto automáticamente en el navegador y avisa del resultado
 function anadirBuffer(nombre, buf) {
   var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   return crearObjeto(id, nombre, buf, Object.assign({}, POR_DEFECTO_OBJ)).then(function (o) {
     guardarAjustes(o);
     seleccionar(o);
     return dbOp('readwrite', function (s) { return s.put({ id: id, nombre: nombre, buf: buf }); })
-      .catch(function () { estado('Se añadió, pero no se pudo guardar el modelo (se perderá al recargar).'); });
+      .then(function () { estado('✔ "' + nombre + '" guardado en este navegador.'); })
+      .catch(function (err) {
+        estado('⚠ No se pudo guardar "' + nombre + '" (' + (err && err.message ? err.message : 'almacenamiento bloqueado') + '). Se perderá al recargar.');
+      });
   });
 }
 function anadirArchivo(f) {
@@ -894,7 +901,7 @@ ren.domElement.addEventListener('pointerdown', function (e) {
   var o = objetoDe(hits[0].object);
   if (!o) return;
   drag = false;                       // no girar la cámara mientras se arrastra el objeto
-  seleccionar(o);
+  seleccionar(o, e.shiftKey);
   planoArr.constant = -o.pivot.position.y;
   var p = new THREE.Vector3();
   if (raycaster.ray.intersectPlane(planoArr, p)) {
@@ -927,12 +934,14 @@ dbOp('readonly', function (s) { return s.getAll(); }).then(function (lista) {
   return (lista || []).filter(function (r) { return r.nombre !== 'Jarrón de prueba'; }).reduce(function (p, r) {
     return p.then(function () {
       return crearObjeto(r.id, r.nombre, r.buf, Object.assign({}, POR_DEFECTO_OBJ, ajustes[r.id] || {}))
-        .catch(function () {});
+        .catch(function () { estado('⚠ No se pudo restaurar "' + r.nombre + '".'); });
     });
   }, Promise.resolve());
 }).then(function () {
   if (objetos.length) seleccionar(objetos[0]);
-}).catch(function () {});
+}).catch(function () {
+  estado('⚠ No se pudo acceder al almacenamiento del navegador; los objetos no se guardarán.');
+});
 
 upd();
 </script>
